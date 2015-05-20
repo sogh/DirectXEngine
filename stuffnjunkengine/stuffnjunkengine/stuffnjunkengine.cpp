@@ -14,13 +14,19 @@
 #pragma comment (lib, "d3dx11.lib")
 #pragma comment (lib, "d3dx10.lib")
 
+// define the screen resolution
+#define SCREEN_WIDTH  800
+#define SCREEN_HEIGHT 600
+
 // global declarations
 IDXGISwapChain *swapchain;             // the pointer to the swap chain interface
 ID3D11Device *dev;                     // the pointer to our Direct3D device interface
 ID3D11DeviceContext *devcon;           // the pointer to our Direct3D device context
+ID3D11RenderTargetView *backbuffer;    // the pointer to our back buffer
 
-									   // function prototypes
+// function prototypes
 void InitD3D(HWND hWnd);     // sets up and initializes Direct3D
+void RenderFrame(void);     // renders a single frame
 void CleanD3D(void);         // closes Direct3D and releases memory
 
 
@@ -59,7 +65,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	}
 
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_STUFFNJUNKENGINE));
-
+	
 	// Enter the infinite message loop
 	while (TRUE)
 	{
@@ -78,13 +84,11 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		}
 		else
 		{
-			// Run game code here
-			// ...
-			// ...
+			RenderFrame();
 		}
 	}
 
-
+	CleanD3D();
 	return (int) msg.wParam;
 }
 
@@ -133,7 +137,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    hInst = hInstance; // Store instance handle in our global variable
 
 					  // calculate the size of the client area
-   RECT wr = { 0, 0, 500, 400 };    // set the size, but not the position
+   RECT wr = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };    // set the size, but not the position
    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);    // adjust the size
 
    // create the window and use the result as the handle
@@ -156,6 +160,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    }
 
    ShowWindow(hWnd, nCmdShow);
+   InitD3D(hWnd);
    UpdateWindow(hWnd);
 
    return TRUE;
@@ -241,11 +246,13 @@ void InitD3D(HWND hWnd)
 	// fill the swap chain description struct
 	scd.BufferCount = 1;                                    // one back buffer
 	scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;     // use 32-bit color
+	scd.BufferDesc.Width = SCREEN_WIDTH;
+	scd.BufferDesc.Height = SCREEN_HEIGHT;
 	scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;      // how swap chain is to be used
 	scd.OutputWindow = hWnd;                                // the window to be used
 	scd.SampleDesc.Count = 4;                               // how many multisamples
 	scd.Windowed = TRUE;                                    // windowed/full-screen mode
-
+	scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 															// create a device, device context and swap chain using the information in the scd struct
 	D3D11CreateDeviceAndSwapChain(NULL,
 		D3D_DRIVER_TYPE_HARDWARE,
@@ -258,5 +265,51 @@ void InitD3D(HWND hWnd)
 		&swapchain,
 		&dev,
 		NULL,
-		&devcon);
+	    &devcon);
+
+	// get the address of the back buffer
+	ID3D11Texture2D *pBackBuffer;
+	swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+
+	// use the back buffer address to create the render target
+	dev->CreateRenderTargetView(pBackBuffer, NULL, &backbuffer);
+	pBackBuffer->Release();
+
+	// set the render target as the back buffer
+	devcon->OMSetRenderTargets(1, &backbuffer, NULL);
+
+	// Set the viewport
+	D3D11_VIEWPORT viewport;
+	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
+
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.Width = SCREEN_WIDTH;
+	viewport.Height = SCREEN_HEIGHT;
+
+	devcon->RSSetViewports(1, &viewport);
+
+}
+
+// this is the function used to render a single frame
+void RenderFrame(void)
+{
+	// clear the back buffer to a deep blue
+	devcon->ClearRenderTargetView(backbuffer, D3DXCOLOR(0.0f, 0.2f, 0.4f, 1.0f));
+
+	// do 3D rendering on the back buffer here
+
+	// switch the back buffer and the front buffer
+	swapchain->Present(0, 0);
+}
+
+// this is the function that cleans up Direct3D and COM
+void CleanD3D()
+{
+	swapchain->SetFullscreenState(FALSE, NULL);    // switch to windowed mode
+	// close and release all existing COM objects
+	swapchain->Release();
+	backbuffer->Release();
+	dev->Release();
+	devcon->Release();
 }
